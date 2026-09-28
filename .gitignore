@@ -1,0 +1,12 @@
+# data: raw downloads (BigQuery, Bitnodes aggregates, GeoIP, prices, labels) and built releases
+data/
+# third-party datasets (download separately, see README)
+elliptic_bitcoin_dataset/
+deanonyized99.5/
+# team pitch material
+*.pptx
+Doomsbyte_*.txt
+# python
+__pycache__/
+*.pyc
+.venv/
