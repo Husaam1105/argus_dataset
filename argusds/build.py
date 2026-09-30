@@ -14,6 +14,8 @@ import shutil
 import time
 
 import numpy as np
+import pandas as pd
+from pathlib import Path
 
 from . import config as C, geo
 
@@ -34,6 +36,9 @@ def main() -> None:
     ap.add_argument("--coverage", type=float, default=None, help="override sensor_peer_coverage (difficulty grid)")
     ap.add_argument("--formats", default=None, help="comma list; default all five")
     ap.add_argument("--window", default=None, help="Track M raw window file (default config.TRACK_M_WINDOW)")
+    ap.add_argument("--exclude-replays-from", nargs="*", default=[],
+                    help="release folders whose replayed real flows must not be reused (keeps a dev set disjoint "
+                         "from a sealed test set)")
     args = ap.parse_args()
 
     rel = C.RELEASES / f"argus-dataset-v{args.version}"
@@ -57,7 +62,13 @@ def main() -> None:
     if "m" in tracks:
         from . import build_track_m
         t = time.time()
-        stats["track_m"] = build_track_m.build(space, s_m, obs_dir / "track_m", truth_dir / "track_m", args.coverage, fmts, args.window)
+        excl = set()
+        for r in args.exclude_replays_from:
+            lab = pd.read_parquet(Path(r) / "truth" / "track_m" / "tx_labels.parquet", columns=["replay_of"])
+            excl |= set(lab["replay_of"].dropna())
+        stats["track_m"] = build_track_m.build(space, s_m, obs_dir / "track_m", truth_dir / "track_m", args.coverage,
+                                               fmts, args.window, exclude_real=excl)
+        stats["track_m"]["excluded_replay_source_txids"] = len(excl)
         print(f"[track M] {stats['track_m']['kept']:,} txs in {time.time() - t:.0f}s")
 
     prefixes = space.prefix_table()

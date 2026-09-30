@@ -647,7 +647,8 @@ def replay_elliptic(w: World, src: pd.DataFrame, price_hist: pd.Series) -> None:
     comp = _components(ill["txid"], ill["in_prev_txid"])
     sizes = comp.value_counts()
     lo, hi = INJ["replay_size"]
-    eligible = np.sort(sizes[(sizes >= lo) & (sizes <= hi)].index.to_numpy())
+    banned = set(comp[ill["txid"].isin(w.exclude_real).to_numpy()])      # flows already used by a sealed test set
+    eligible = np.sort([c for c in sizes[(sizes >= lo) & (sizes <= hi)].index if c not in banned])
     chosen = w.rng.choice(eligible, size=min(w.cnt("replay_components"), len(eligible)), replace=False)
     for ci, root in enumerate(chosen):
         replay_flow(w, ill[comp.to_numpy() == root], f"EL{ci:03d}", price_hist, role_of=lambda a: "actor",
@@ -669,7 +670,8 @@ def replay_ransomwhere(w: World, flows: pd.DataFrame, seeds: pd.DataFrame, price
     ok = set(sizes[(sizes >= lo) & (sizes <= hi)].index)
     # a component must contain an operator spend (hop 1), otherwise there is no laundering to replay
     has_op = fl.assign(c=comp.to_numpy()).groupby("c")["hop"].apply(lambda h: bool((h == 1).any()))
-    eligible = np.sort([c for c in ok if has_op.get(c, False)])
+    banned = set(comp[fl["txid"].isin(w.exclude_real).to_numpy()])       # flows already used by a sealed test set
+    eligible = np.sort([c for c in ok if has_op.get(c, False) and c not in banned])
     chosen = w.rng.choice(eligible, size=min(w.cnt("rw_replay_components"), len(eligible)), replace=False)
     for ci, root in enumerate(chosen):
         part = fl[comp.to_numpy() == root]
@@ -691,7 +693,9 @@ def replay_ransomwhere(w: World, flows: pd.DataFrame, seeds: pd.DataFrame, price
                     pattern_type="ransomware_real_replay", family=fam)
 
 
-def build(space, seed: np.random.SeedSequence, out_obs, out_truth, coverage=None, formats=None, window=None) -> dict:
+def build(space, seed: np.random.SeedSequence, out_obs, out_truth, coverage=None, formats=None, window=None,
+          exclude_real: set | None = None) -> dict:
+    """exclude_real: real txids whose replay flows must not be reused (they appear in a sealed test release)."""
     s_inj, s_net = seed.spawn(2)
     rng = np.random.default_rng(s_inj)
     raw_path = C.RAW / "track_m" / (window or C.TRACK_M_WINDOW)
@@ -728,6 +732,7 @@ def build(space, seed: np.random.SeedSequence, out_obs, out_truth, coverage=None
     r_led, _ = normalize(r_raw)
     r_led = r_led.merge(labels, on="txid", how="left")
     del r_raw
+    w.exclude_real = exclude_real or set()
     run_scenarios(w, r_led, price, rw_led, rw_seeds)
 
     in_window = [r for r in w.txs if w.t0 <= r["t_intent"] <= w.t1]

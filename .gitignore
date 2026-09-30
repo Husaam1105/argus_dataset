@@ -10,3 +10,7 @@ Doomsbyte_*.txt
 __pycache__/
 *.pyc
 .venv/
+# local archives and checkouts of other repos
+*.zip
+ARGUS_prototype/
+ARGUS_prototype_improve/
